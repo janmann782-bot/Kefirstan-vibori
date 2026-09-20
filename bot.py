@@ -24,7 +24,7 @@ from aiogram.types import (
 import db
 import election
 from config import (
-    ADMIN_ID, BOT_TOKEN, DB_PATH, LIVE_EDIT_INTERVAL, PARTIES, REGION_ASSIGN_WEIGHTS,
+    ADMIN_ID, BOT_TOKEN, DB_PATH, LIVE_EDIT_INTERVAL, PARTIES, PARTY_MARKERS, REGION_ASSIGN_WEIGHTS,
     REGIONS, STANDARD_ELECTION_SECONDS, TEST_ELECTION_SECONDS, TICK_INTERVAL,
     USER_SIGNAL_MAX, USER_SIGNAL_MIN,
 )
@@ -50,7 +50,7 @@ def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🗳 Голосовать", callback_data="vote:open"), InlineKeyboardButton(text="📊 Лайв", callback_data="live")],
         [InlineKeyboardButton(text="🏛 Партии", callback_data="parties"), InlineKeyboardButton(text="🧭 Моя автономия", callback_data="myregion")],
-        [InlineKeyboardButton(text="⚙️ Как считается", callback_data="mechanics"), InlineKeyboardButton(text="📚 Вики", url=wiki_url("Политические партии Кефирстана"))],
+        [InlineKeyboardButton(text="⚙️ Как голосовать", callback_data="mechanics"), InlineKeyboardButton(text="📚 Вики", url=wiki_url("Политические партии Кефирстана"))],
     ])
 
 
@@ -64,7 +64,7 @@ def party_vote_kb() -> InlineKeyboardMarkup:
     for i in range(0, len(codes), 2):
         row = []
         for code in codes[i:i+2]:
-            row.append(InlineKeyboardButton(text=PARTIES[code].name, callback_data=f"vote:pick:{code}"))
+            row.append(InlineKeyboardButton(text=f"{PARTY_MARKERS[code]} {PARTIES[code].name}", callback_data=f"vote:pick:{code}"))
         rows.append(row)
     rows.append([InlineKeyboardButton(text="← Назад", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -72,7 +72,7 @@ def party_vote_kb() -> InlineKeyboardMarkup:
 
 def confirm_vote_kb(code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Да, {PARTIES[code].name}", callback_data=f"vote:do:{code}")],
+        [InlineKeyboardButton(text=f"Да, {PARTY_MARKERS[code]} {PARTIES[code].name}", callback_data=f"vote:do:{code}")],
         [InlineKeyboardButton(text="Нет, обратно", callback_data="vote:open")],
     ])
 
@@ -80,7 +80,7 @@ def confirm_vote_kb(code: str) -> InlineKeyboardMarkup:
 def parties_kb() -> InlineKeyboardMarkup:
     rows = []
     for code, p in PARTIES.items():
-        rows.append([InlineKeyboardButton(text=f"{p.name} - открыть вики", url=wiki_url(p.wiki_title))])
+        rows.append([InlineKeyboardButton(text=f"{PARTY_MARKERS[code]} {p.name} - открыть вики", url=wiki_url(p.wiki_title))])
     rows.append([InlineKeyboardButton(text="← Назад", callback_data="home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -105,7 +105,7 @@ def choose_party_kb(prefix: str, region: str) -> InlineKeyboardMarkup:
     rows = []
     codes = list(PARTIES)
     for i in range(0, len(codes), 2):
-        rows.append([InlineKeyboardButton(text=PARTIES[c].name, callback_data=f"{prefix}:{region}:{c}") for c in codes[i:i+2]])
+        rows.append([InlineKeyboardButton(text=f"{PARTY_MARKERS[c]} {PARTIES[c].name}", callback_data=f"{prefix}:{region}:{c}") for c in codes[i:i+2]])
     rows.append([InlineKeyboardButton(text="← Админка", callback_data="adm:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -141,23 +141,49 @@ def build_caption(s: dict) -> str:
     e = s["election"]
     status = "ИДЕТ" if e["status"] == "active" else "ЗАКРЫТО"
     lines = [f"🗳 <b>ВЫБОРЫ КЕФИРСТАНА 2059 - {status}</b>", fmt_time_left(s)]
+
     for r in ("KAR", "TAR", "MAR"):
         sh = s["shares"][r]
         ordered = sorted(PARTIES, key=lambda p: sh[p], reverse=True)
-        bits = " · ".join(f"{PARTIES[p].name} {sh[p]*100:.1f}%" for p in ordered)
+        leader, runner = ordered[0], ordered[1]
+        margin = (sh[leader] - sh[runner]) * 100
         rs = s["regions"][r]
         turnout_now = min(99.0, rs["counted"] / max(1, rs["electorate"]) * 100)
-        lines.append(f"\n<b>{REGIONS[r]['abbr']}</b> явка {turnout_now:.1f}%\n{bits}")
-    lines.append("\n<b>ЙАР</b> N/D")
+
+        lines.append(
+            f"\n<b>{REGIONS[r]['abbr']}</b> · явка {turnout_now:.1f}% · "
+            f"лидер {PARTY_MARKERS[leader]} <b>{PARTIES[leader].name}</b> +{margin:.1f} п.п."
+        )
+
+        # Разбиваем длинную сводку на 2 строки. Так взгляд не ломается об стену процентов.
+        first = ordered[:4]
+        second = ordered[4:]
+        lines.append(" · ".join(
+            f"{PARTY_MARKERS[p]} {PARTIES[p].name} {sh[p]*100:.1f}%" for p in first
+        ))
+        if second:
+            lines.append(" · ".join(
+                f"{PARTY_MARKERS[p]} {PARTIES[p].name} {sh[p]*100:.1f}%" for p in second
+            ))
+
+    lines.append("\n<b>ЙАР</b> · N/D")
+
     if s["seats"]:
         seats = s["seats"]
         top = sorted(PARTIES, key=lambda p: seats[p], reverse=True)
-        seat_bits = " · ".join(f"{PARTIES[p].name} {seats[p]}" for p in top if seats[p] > 0)
+        seat_bits = " · ".join(
+            f"{PARTY_MARKERS[p]} {PARTIES[p].name} {seats[p]}" for p in top if seats[p] > 0
+        )
         if seats.get("IND", 0):
-            seat_bits += f" · НЕЗ {seats['IND']}"
-        lines.append(f"\n<b>240 мест, проекция:</b> {seat_bits}")
-    # Telegram caption limit 1024. Если внезапно разрастется - режем только хвост про места.
+            seat_bits += f" · ⬜ НЕЗ {seats['IND']}"
+        lines.append(f"\n<b>Если закрыть сейчас:</b> {seat_bits}")
+
     text = "\n".join(lines)
+    # Лимит подписи Telegram 1024. Сначала убираем проекцию мест, если вдруг разрослось.
+    if len(text) > 1010 and s["seats"]:
+        cut = text.rfind("\n<b>Если закрыть сейчас:</b>")
+        if cut > 0:
+            text = text[:cut]
     return text[:1010]
 
 
@@ -282,7 +308,7 @@ async def cb_vote_do(cb: CallbackQuery, bot: Bot):
         u = await db.get_user(cb.from_user.id)
         return await cb.answer(f"Голос уже записан: {PARTIES[u['voted_party']].name}", show_alert=True)
     await cb.message.edit_text(
-        f"<b>Голос принят</b>\n\n{REGIONS[user['region']]['abbr']} · {PARTIES[code].name}\n\nВ общий счетчик +1 не прилетел. Ты сдвинул вероятность дальнейших голосов своей автономии. Теперь можно открыть лайв и смотреть насколько этого хватило",
+        f"<b>Голос принят</b>\n\n{REGIONS[user['region']]['abbr']} · {PARTIES[code].name}\n\nВсе. Бюллетень ушел в подсчет твоей автономии. Теперь остается смотреть лайв и надеяться что остальные не проголосуют как идиоты",
         reply_markup=main_kb(),
     )
     await cb.answer("Записано")

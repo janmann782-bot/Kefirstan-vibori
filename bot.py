@@ -274,7 +274,7 @@ async def cb_vote_open(cb: CallbackQuery):
         await cb.answer(f"Ты уже проголосовал: {PARTIES[user['voted_party']].name}", show_alert=True)
         return
     await cb.message.edit_text(
-        f"<b>{REGIONS[user['region']]['abbr']} - твой бюллетень</b>\n\nВыбери партию. После подтверждения обычной кнопки 'передумал' уже не будет",
+        f"<b>{REGIONS[user['region']]['abbr']} - твой бюллетень</b>\n\nВыбери партию. После подтверждения обычной кнопки \"передумал\" уже не будет",
         reply_markup=party_vote_kb(),
     )
     await cb.answer()

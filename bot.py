@@ -29,7 +29,7 @@ from config import (
     USER_SIGNAL_MAX, USER_SIGNAL_MIN,
 )
 from render import OUTPUT_PATH, render_map
-from texts import mechanics_text, parties_text, region_text, start_text, wiki_url
+from texts import parties_text, region_text, start_text, wiki_url
 
 router = Router()
 REFRESH_LOCK = asyncio.Lock()

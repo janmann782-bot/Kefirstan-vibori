@@ -50,7 +50,7 @@ def main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🗳 Голосовать", callback_data="vote:open"), InlineKeyboardButton(text="📊 Лайв", callback_data="live")],
         [InlineKeyboardButton(text="🏛 Партии", callback_data="parties"), InlineKeyboardButton(text="🧭 Моя автономия", callback_data="myregion")],
-        [InlineKeyboardButton(text="⚙️ Как голосовать", callback_data="mechanics"), InlineKeyboardButton(text="📚 Вики", url=wiki_url("Политические партии Кефирстана"))],
+        [InlineKeyboardButton(text="📚 Вики", url=wiki_url("Политические партии Кефирстана"))],
     ])
 
 
@@ -243,11 +243,6 @@ async def cb_parties(cb: CallbackQuery):
     await cb.message.edit_text(parties_text(), reply_markup=parties_kb())
     await cb.answer()
 
-
-@router.callback_query(F.data == "mechanics")
-async def cb_mechanics(cb: CallbackQuery):
-    await cb.message.edit_text(mechanics_text(), reply_markup=back_kb())
-    await cb.answer()
 
 
 @router.callback_query(F.data == "myregion")
